@@ -16,26 +16,23 @@ type BlockAllocator interface {
 }
 
 type AllocatorPool struct {
-	minsize, maxsize int
-	pool             *sync.Pool
-	ch               chan []byte
+	blocksize int
+	pool      *sync.Pool
+	ch        chan []byte
 }
 
-func NewAllocatorPool(minsize, maxsize int,
+func NewAllocatorPool(blocksize int,
 	pool bool,
 	cachesize int,
 ) *AllocatorPool {
-	if maxsize < 0 {
-		panic(`blocksize(` + strconv.Itoa(maxsize) + `) must >=0`)
-	}
-	if minsize < 0 {
-		minsize = 0
+	if blocksize < 0 {
+		panic(`blocksize(` + strconv.Itoa(blocksize) + `) must >=0`)
 	}
 	var p *sync.Pool
 	if pool {
 		p = &sync.Pool{
 			New: func() any {
-				return make([]byte, maxsize)
+				return make([]byte, blocksize)
 			},
 		}
 	}
@@ -44,21 +41,20 @@ func NewAllocatorPool(minsize, maxsize int,
 		ch = make(chan []byte, cachesize)
 	}
 	return &AllocatorPool{
-		minsize: minsize,
-		maxsize: maxsize,
-		pool:    p,
-		ch:      ch,
+		blocksize: blocksize,
+		pool:      p,
+		ch:        ch,
 	}
 }
 
 // Return block size
 func (a *AllocatorPool) Block() int {
-	return a.maxsize
+	return a.blocksize
 }
 
 // Memory is no longer in use release it
 func (a *AllocatorPool) Put(b []byte) {
-	if cap(b) < a.maxsize {
+	if cap(b) < a.blocksize {
 		return
 	}
 	if a.ch != nil {
@@ -86,5 +82,5 @@ func (a *AllocatorPool) Get() (b []byte) {
 		b = a.pool.Get().([]byte)
 		return
 	}
-	return make([]byte, a.maxsize)
+	return make([]byte, a.blocksize)
 }
