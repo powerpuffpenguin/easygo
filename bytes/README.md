@@ -82,3 +82,7 @@ AllocatorPool is used to allocate fixed size []byte, and Pool is used to apply f
 	// Return []byte are no longer used
 	p.Put(b)
 ```
+
+# Buffer
+
+It is the same as the bytes.Buffer of the standard library, except that the Allocator property is used to specify where to apply for memory.
