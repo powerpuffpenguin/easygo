@@ -5,14 +5,18 @@ import (
 	"sync"
 )
 
-// memory allocation release interface
-type BlockAllocator interface {
-	// Return block size
-	Block() int
+type Allocator interface {
 	// Memory is no longer in use release it
 	Put(b []byte)
 	// Get a block of memory
 	Get() []byte
+}
+
+// memory allocation release interface
+type BlockAllocator interface {
+	Allocator
+	// Return block size
+	Block() int
 }
 
 type AllocatorPool struct {
