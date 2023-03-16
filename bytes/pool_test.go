@@ -13,7 +13,7 @@ import (
 
 func TestPool(t *testing.T) {
 	vals := []int{
-		2, 4, 8, 16,
+		8, 16, 32, 64,
 	}
 
 	p := bytes.NewPool(algorithm.Map(vals, func(v int) bytes.BlockAllocator {
@@ -93,7 +93,7 @@ func benchmarkPool(b *testing.B, p *bytes.Pool, vals []int) {
 	close(ch)
 	w0.Wait()
 }
-func newPool(sync bool, cache int) *bytes.Pool {
+func newPool(sync bool, cache int, opt ...bytes.PoolOption) *bytes.Pool {
 	return bytes.NewPool(
 		[]bytes.BlockAllocator{
 			bytes.NewAllocatorPool(128, sync, cache),
@@ -106,7 +106,47 @@ func newPool(sync bool, cache int) *bytes.Pool {
 			bytes.NewAllocatorPool(16384, sync, cache),
 			bytes.NewAllocatorPool(32768, sync, cache),
 		},
+		opt...,
 	)
+}
+
+var allocator128 = bytes.NewAllocatorPool(128, true, 100)
+var allocator256 = bytes.NewAllocatorPool(256, true, 100)
+var allocator512 = bytes.NewAllocatorPool(512, true, 100)
+var allocator1024 = bytes.NewAllocatorPool(1024, true, 100)
+var poolOpts = []bytes.PoolOption{
+	bytes.PoolBeforeGet(func(size int) []byte {
+		if size <= 128 {
+			return allocator128.Get()[:size]
+		}
+		if size <= 256 {
+			return allocator256.Get()[:size]
+		}
+		if size <= 512 {
+			return allocator512.Get()[:size]
+		}
+		if size <= 1024 {
+			return allocator1024.Get()[:size]
+			// return make([]byte, size)
+		}
+		return nil
+	}),
+	bytes.PoolBeforePut(func(b []byte) bool {
+		size := cap(b)
+		if size > 1024 {
+			return false
+		}
+		if size > 512 {
+			allocator1024.Put(b)
+		} else if size > 256 {
+			allocator512.Put(b)
+		} else if size > 128 {
+			allocator256.Put(b)
+		} else {
+			allocator128.Put(b)
+		}
+		return true
+	}),
 }
 
 func BenchmarkPoolMinNo(b *testing.B) {
@@ -123,7 +163,9 @@ func BenchmarkPoolMinCache(b *testing.B) {
 func BenchmarkPoolMin(b *testing.B) {
 	benchmarkPool(b, newPool(true, 100), minBlocks)
 }
-
+func BenchmarkPoolMinOpts(b *testing.B) {
+	benchmarkPool(b, newPool(true, 100, poolOpts...), minBlocks)
+}
 func BenchmarkPoolMin4No(b *testing.B) {
 	benchmarkPool(b, nil, minBlocks[:4])
 }
@@ -137,6 +179,9 @@ func BenchmarkPoolMin4Cache(b *testing.B) {
 }
 func BenchmarkPoolMin4(b *testing.B) {
 	benchmarkPool(b, newPool(true, 100), minBlocks[:4])
+}
+func BenchmarkPoolMin4Opts(b *testing.B) {
+	benchmarkPool(b, newPool(true, 100, poolOpts...), minBlocks[:4])
 }
 
 var mediumBlocks = []int{
@@ -166,20 +211,25 @@ func BenchmarkPoolMediumCache(b *testing.B) {
 func BenchmarkPoolMedium(b *testing.B) {
 	benchmarkPool(b, newPool(true, 100), mediumBlocks)
 }
-
+func BenchmarkPoolMediumOpts(b *testing.B) {
+	benchmarkPool(b, newPool(true, 100, poolOpts...), mediumBlocks)
+}
 func BenchmarkPoolMedium5No(b *testing.B) {
 	benchmarkPool(b, nil, mediumBlocks[:4])
 }
 
 func BenchmarkPoolMedium5Sync(b *testing.B) {
-	benchmarkPool(b, newPool(true, 0), mediumBlocks[:4])
+	benchmarkPool(b, newPool(true, 0), mediumBlocks[:5])
 }
 
 func BenchmarkPoolMedium5Cache(b *testing.B) {
-	benchmarkPool(b, newPool(false, 100), mediumBlocks[:4])
+	benchmarkPool(b, newPool(false, 100), mediumBlocks[:5])
 }
 func BenchmarkPoolMedium5(b *testing.B) {
-	benchmarkPool(b, newPool(true, 100), mediumBlocks[:4])
+	benchmarkPool(b, newPool(true, 100), mediumBlocks[:5])
+}
+func BenchmarkPoolMedium5Opts(b *testing.B) {
+	benchmarkPool(b, newPool(true, 100, poolOpts...), mediumBlocks[:5])
 }
 
 var blocks = []int{
@@ -207,4 +257,7 @@ func BenchmarkPoolBlocksCache(b *testing.B) {
 }
 func BenchmarkPoolBlocks(b *testing.B) {
 	benchmarkPool(b, newPool(true, 100), blocks)
+}
+func BenchmarkPoolBlocksOpts(b *testing.B) {
+	benchmarkPool(b, newPool(true, 100, poolOpts...), blocks)
 }

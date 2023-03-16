@@ -7,6 +7,9 @@ import (
 
 // Use the block memory implemented by sync.Pool.
 // Reuse []byte to reduce the time of memory application and release.
+//
+// For block allocations smaller than 1024 the pool may be slower than the original make
+// because the time spent looking for the allocator may exceed the memory allocation time
 type Pool struct {
 	opts       poolOptions
 	allocators []BlockAllocator
@@ -43,6 +46,15 @@ func NewPool(allocators []BlockAllocator, opt ...PoolOption) *Pool {
 
 // Like make([]byte,size,auto) from pool
 func (p *Pool) Get(size int) (b []byte) {
+	if p.opts.beforeGetf != nil {
+		b = p.opts.beforeGetf(size)
+		if b != nil {
+			return
+		}
+	} else if size == 0 {
+		return make([]byte, 0)
+	}
+
 	n := len(p.allocators)
 	if n == 0 {
 		if p.opts.newf == nil {
@@ -62,8 +74,7 @@ func (p *Pool) Get(size int) (b []byte) {
 		return
 	}
 	if p.opts.getf == nil {
-		b = p.allocators[i].Get()
-		b = b[:size]
+		b = p.allocators[i].Get()[:size]
 	} else {
 		b = p.opts.getf(p.allocators[i], size)
 	}
@@ -73,6 +84,10 @@ func (p *Pool) Get(size int) (b []byte) {
 // Return bytes to the pool for reuse.
 // Bytes may not be created by the pool, as long as it is confirmed that no one will use it, it can be submitted to the pool
 func (p *Pool) Put(b []byte) {
+	if p.opts.beforePutf != nil && p.opts.beforePutf(b) {
+		return
+	}
+
 	n := len(p.allocators)
 	if n == 0 {
 		return
@@ -82,19 +97,31 @@ func (p *Pool) Put(b []byte) {
 		return
 	}
 	i := sort.Search(n, func(i int) bool { return p.allocators[i].Block() >= size })
-	if i == n { // not match
+	if i == n { // mismatch too large
 		i--
-		if size <= p.allocators[i].Block()*4/3 {
-			p.allocators[i].Put(b)
+		if p.opts.putf == nil {
+			if size <= p.allocators[i].Block()*4/3 {
+				p.allocators[i].Put(b)
+			}
+		} else {
+			p.opts.putf(p.allocators[i], b)
 		}
 		return
 	}
-	if p.allocators[i].Block() == size { // equal
-		p.allocators[i].Put(b)
+	if size == p.allocators[i].Block() { // equal
+		if p.opts.putf == nil {
+			p.allocators[i].Put(b)
+		} else {
+			p.opts.putf(p.allocators[i], b)
+		}
 	} else if i > 0 {
 		i--
-		if size <= p.allocators[i].Block()*4/3 {
-			p.allocators[i].Put(b)
+		if p.opts.putf == nil {
+			if size <= p.allocators[i].Block()*4/3 {
+				p.allocators[i].Put(b)
+			}
+		} else {
+			p.opts.putf(p.allocators[i], b)
 		}
-	} // else not match
+	} // mismatch too small
 }
