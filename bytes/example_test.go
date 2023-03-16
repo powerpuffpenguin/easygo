@@ -1,6 +1,7 @@
 package bytes_test
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/powerpuffpenguin/easygo/bytes"
@@ -20,7 +21,10 @@ func ExamplePool() {
 }
 
 func ExampeAllocatorPool_Cache() {
-	allocator := bytes.NewAllocatorPool(128, true, 100)
+	allocator := bytes.NewAllocatorPool(128, // block size 128
+		true, // enable sync.Pool
+		100,  // chan cache 100
+	)
 	ch := allocator.Cache()
 	if ch != nil {
 		go func() {
@@ -43,4 +47,11 @@ func ExampeAllocatorPool_Cache() {
 			}
 		}()
 	}
+
+	// allocation block
+	b := allocator.Get()
+	// use block
+	fmt.Println(b)
+	// Return blocks are no longer used
+	allocator.Put(b)
 }
