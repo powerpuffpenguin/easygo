@@ -64,7 +64,8 @@ func (p *Pool) Get(size int) (b []byte) {
 		}
 		return
 	}
-	i := sort.Search(n, func(i int) bool { return p.allocators[i].Block() >= size })
+	// i := sort.Search(n, func(i int) bool { return p.allocators[i].Block() >= size })
+	i := p.search(size)
 	if i == n { // not match
 		if p.opts.newf == nil {
 			b = make([]byte, size)
@@ -96,7 +97,8 @@ func (p *Pool) Put(b []byte) {
 	if size == 0 {
 		return
 	}
-	i := sort.Search(n, func(i int) bool { return p.allocators[i].Block() >= size })
+	// i := sort.Search(n, func(i int) bool { return p.allocators[i].Block() >= size })
+	i := p.search(size)
 	if i == n { // mismatch too large
 		i--
 		if p.opts.putf == nil {
@@ -124,4 +126,21 @@ func (p *Pool) Put(b []byte) {
 			p.opts.putf(p.allocators[i], b)
 		}
 	} // mismatch too small
+}
+func (p *Pool) search(size int) int {
+	// Define f(-1) == false and f(n) == true.
+	// Invariant: f(i-1) == false, f(j) == true.
+	i, j := 0, len(p.allocators)
+	for i < j {
+		h := int(uint(i+j) >> 1) // avoid overflow when computing h
+		// i ≤ h < j
+		// if !f(h) {
+		if p.allocators[h].Block() < size {
+			i = h + 1 // preserves f(i-1) == false
+		} else {
+			j = h // preserves f(j) == true
+		}
+	}
+	// i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
+	return i
 }
