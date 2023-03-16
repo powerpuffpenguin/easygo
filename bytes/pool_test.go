@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/powerpuffpenguin/easygo/algorithm"
+	"github.com/powerpuffpenguin/easygo"
 	"github.com/powerpuffpenguin/easygo/bytes"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,7 +16,7 @@ func TestPool(t *testing.T) {
 		8, 16, 32, 64,
 	}
 
-	p := bytes.NewPool(algorithm.Map(vals, func(v int) bytes.BlockAllocator {
+	p := bytes.NewPool(easygo.Map(vals, func(v int) bytes.BlockAllocator {
 		return bytes.NewAllocatorPool(v, true, 10)
 	}))
 
